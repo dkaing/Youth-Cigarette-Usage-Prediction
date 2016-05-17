@@ -1,0 +1,409 @@
+library('ggplot2')
+
+data <- read.csv("~/Downloads/YouthRisk.csv", header=T)
+data$LocationAbbr <- as.character(data$LocationAbbr)
+data$TopicDesc <- as.character(data$TopicDesc)
+data$Response <- as.character(data$Response)
+data$Gender <- as.character(data$Gender)
+
+ext <- data[data$TopicDesc == "Cigarette Use (Youth)" & data$Response == "Current", ]
+processed <- ext[, c("YEAR", "LocationAbbr", "Data_Value", "Sample_Size", "Gender")]
+processed$prob <- processed$Data_Value/100
+processed$noSmokeProb <- 1-processed$prob
+
+datalist <- list()
+num_models <- sum(unique(data$YEAR) <2007)-1
+year <- 1993
+for(i in 1:num_models) {
+        if(year <2007) {
+                year1 <- year
+                year2 <- year + 2
+                
+                male_year1 <- processed[processed$Gender == "Male" & processed$YEAR == year1,]
+                male_year2 <- processed[processed$Gender == "Male" & processed$YEAR == year2,]
+                merged <- merge(male_year1, male_year2, by = "LocationAbbr")
+                merged$model <- paste(year1,"_", year2, sep = "")
+                merged$PSS <- (merged$prob.y*merged$Sample_Size.y)/
+                        ((merged$prob.y*merged$Sample_Size.y)+(merged$prob.x*merged$Sample_Size.x))
+                merged$PDS <- 1 - merged$PSS
+                merged$PDD <- (merged$noSmokeProb.y*merged$Sample_Size.y)/
+                        ((merged$noSmokeProb.y*merged$Sample_Size.y)+(merged$noSmokeProb.x*merged$Sample_Size.x))
+                merged$PSD <- 1 - merged$PDD
+        }
+        year <- year2 
+        datalist[[i]] <- merged
+}
+
+combined_model <- do.call(rbind, datalist)
+model_data <- combined_model[, c("YEAR.x", "YEAR.y", "LocationAbbr","Sample_Size.x","Sample_Size.y", "model", "PSS", "PSD", "PDS", "PDD")]
+
+
+all_mod <- list()
+num_models <- length(unique(model_data$YEAR.y))
+for(m in 1:num_models) {
+        year_mod <- unique(model_data$YEAR.y)[m]
+        mod1 <- model_data[model_data$YEAR.y == year_mod,]
+        d <- list()
+        for(i in 1:nrow(mod1)) {
+                A <- matrix(c(mod1$PSS[i], mod1$PSD[i], mod1$PDS[i], mod1$PDD[i]), nrow = 2, ncol = 2, byrow = T)
+                year <- unique(mod1$YEAR.y)
+                list_A <- list()
+                for(j in seq(year,2020, by = 2)){
+                        if(year < 2022) {
+                                A <- A%*%A
+                        }
+                        
+                        list_A[[j]] <- c(A[1,1])
+                        year <- year +2
+                }
+                d[[i]] <- do.call(cbind, list_A)
+                
+        }
+        
+        f <- data.frame(do.call(rbind, d))
+        f$state <- mod1$LocationAbbr
+        colnames(f) <- c(seq(year_mod, 2020, by = 2), "state")
+        f$model <- paste("model", m )
+        f$year <- year_mod-2
+        f$Sample_Size.x <- mod1$Sample_Size.x
+        all_mod[[m]] <- f
+        
+}
+
+mod1 <- data.frame(all_mod[[1]])
+mod2 <- data.frame(all_mod[[2]])
+mod3 <- data.frame(all_mod[[3]])
+mod4 <- data.frame(all_mod[[4]])
+mod5 <- data.frame(all_mod[[5]])
+mod6 <- data.frame(all_mod[[6]])
+
+
+
+model1 <- mod1[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_1993 <- ext[ext$YEAR == 1993 & ext$Gender == "Male", ]
+data93 <- all_1993[, c("Data_Value", "LocationAbbr")]
+colnames(data93) <- c("yearprob", "state")
+model1 <- merge(model1, data93,by = "state")
+
+model2 <- mod2[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_1995 <- ext[ext$YEAR == 1995 & ext$Gender == "Male", ]
+data95 <- all_1995[, c("Data_Value", "LocationAbbr")]
+colnames(data95) <- c("yearprob", "state")
+model2 <- merge(model2, data95,by = "state")
+
+model3 <- mod3[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_1997 <- ext[ext$YEAR == 1997 & ext$Gender == "Male", ]
+data97 <- all_1997[, c("Data_Value", "LocationAbbr")]
+colnames(data97) <- c("yearprob", "state")
+model3 <- merge(model3, data97,by = "state")
+
+
+model4 <- mod4[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_1999 <- ext[ext$YEAR == 1999 & ext$Gender == "Male", ]
+data99 <- all_1999[, c("Data_Value", "LocationAbbr")]
+colnames(data99) <- c("yearprob", "state")
+model4 <- merge(model4, data99,by = "state")
+
+model5 <- mod5[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_2001 <- ext[ext$YEAR == 2001 & ext$Gender == "Male", ]
+data01 <- all_2001[, c("Data_Value", "LocationAbbr")]
+colnames(data01) <- c("yearprob", "state")
+model5 <- merge(model5, data01,by = "state")
+
+all_models <- rbind(model1, model2, model3, model4, model5)
+
+test_data_all <- ext[ext$YEAR>=2007 & ext$Gender == "Male", ]
+test_data <- test_data_all[, c("YEAR", "LocationAbbr", "Sample_Size", "Data_Value")]
+colnames(test_data) <- c("year", "state", "Sample_Size", "prob")
+
+
+year <- seq(2007, 2013, by = 2)
+num_mod <- length(unique(all_models$model))
+modl <- unique(all_models$model)
+list_ym <- list()
+errors <- list()
+for(j in 1:length(year)){
+        test_year <- test_data[test_data$year == year[j], ]
+        for(f in 1:num_mod){
+                m <- all_models[all_models$model == modl[f],]
+                merged_mod <- merge(m, test_year, by = "state")
+                merged_mod$prob <- merged_mod$prob/100
+                merged_mod$yearprob <- merged_mod$yearprob/100
+                if(year[j]== 2007){
+                        pre <- merged_mod$X2007
+                } 
+                else if(year[j]==2009) {
+                        pre <- merged_mod$X2009
+                }
+                else if(year[j]==2011) {
+                        pre <- merged_mod$X2011
+                }
+                else if(year[j]==2013) {
+                        pre <- merged_mod$X2013
+                }
+                merged_mod$true <- merged_mod$prob* merged_mod$Sample_Size/
+                        (merged_mod$prob*merged_mod$Sample_Size + merged_mod$yearprob*merged_mod$Sample_Size.x)
+                error <- sum((pre - merged_mod$true)^2)
+                errors[[f]] <- c(error, modl[f], year[j])
+        }
+        list_ym[[j]] <- do.call(rbind, errors)
+}
+
+output <- data.frame(do.call(rbind, list_ym))
+colnames(output) <- c("errors", "model", "year")
+output$errors <- as.numeric(paste(output$errors))
+visdat <- ext[ext$Gender == "Male", ]
+        
+        
+## Exploring Male Data
+ggplot(visdat, aes(x = YEAR, y = Data_Value/100))+geom_point(colour = "darkblue")+stat_smooth(colour = "black")+
+        scale_x_continuous(breaks = seq(1993, 2013, by = 2))+theme(text = element_text(size = 15))+xlab("Year")+ylab("Proportion of Male Smokers")
+dev.copy(png, "Figure 1. Proportion of Male Smokers over Time.png")
+dev.off()
+
+## Assessing Models
+ggplot(output, aes(x = year, y = errors, colour = model))+geom_point(size = 3)+
+        theme(text= element_text(size = 15))+xlab("Year")+ylab("Sum of Squared Errors of Male Smokers")
+dev.copy(png, "Figure 2. SSE for Males.png")
+dev.off()
+
+ggplot(output, aes(x = model, y = errors, fill = model ))+geom_boxplot()+
+        theme(text = element_text(size = 15))+xlab("Model")+ylab("Sum of Squared Errors of Male Smokers")
+dev.copy(png, "Figure 3. Boxplot of SSE for Male.png")
+dev.off()
+
+Pred_Model <- (model4$X2019*(model4$yearprob/100)*model4$Sample_Size.x)/(model4$Sample_Size.x - (model4$X2019*model4$Sample_Size.x))
+pred_data <- data.frame(cbind(model4$state, Pred_Model))
+colnames(pred_data) <- c("state", "predictions")
+pred_data$predictions <- as.numeric(paste(pred_data$predictions))
+
+ggplot(pred_data, aes(x = state, y = predictions))+geom_bar(stat = "identity", fill = "darkblue")+scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.4, by = 0.1))+
+        theme(text = element_text(size = 15))+xlab("State")+ylab("Predicted Proportion of Male Smokers in 2019")
+
+dev.copy(png, "Figure 4. Predicted Proportion of Male Smokers in 2019.png")
+dev.off()
+
+male_pred <- pred_data
+male_model4 <- model4
+ggplot(model4, aes(x = state, y = yearprob/100))+geom_bar(stat = "identity", fill = "darkblue")+scale_y_continuous(limits = c(0,0.5), breaks = seq(0, 0.5, by = 0.1))+
+        theme(text = element_text(size = 15))+xlab("State")+ylab("Proportion of Male Smokers in 1999")
+
+dev.copy(png, "Figure 4b. Proportion of Male Smokers in 1999.png")
+dev.off()
+
+
+### Female 
+
+datalist <- list()
+num_models <- sum(unique(data$YEAR) <2007)-1
+year <- 1993
+for(i in 1:num_models) {
+        if(year <2007) {
+                year1 <- year
+                year2 <- year + 2
+                
+                female_year1 <- processed[processed$Gender == "Female" & processed$YEAR == year1,]
+                female_year2 <- processed[processed$Gender == "Female" & processed$YEAR == year2,]
+                merged <- merge(female_year1, female_year2, by = "LocationAbbr")
+                merged$model <- paste(year1,"_", year2, sep = "")
+                merged$PSS <- (merged$prob.y*merged$Sample_Size.y)/
+                        ((merged$prob.y*merged$Sample_Size.y)+(merged$prob.x*merged$Sample_Size.x))
+                merged$PDS <- 1 - merged$PSS
+                merged$PDD <- (merged$noSmokeProb.y*merged$Sample_Size.y)/
+                        ((merged$noSmokeProb.y*merged$Sample_Size.y)+(merged$noSmokeProb.x*merged$Sample_Size.x))
+                merged$PSD <- 1 - merged$PDD
+        }
+        year <- year2 
+        datalist[[i]] <- merged
+}
+
+combined_model <- do.call(rbind, datalist)
+model_data <- combined_model[, c("YEAR.x", "YEAR.y", "LocationAbbr","Sample_Size.x","Sample_Size.y", "model", "PSS", "PSD", "PDS", "PDD")]
+
+
+all_mod <- list()
+num_models <- length(unique(model_data$YEAR.y))
+for(m in 1:num_models) {
+        year_mod <- unique(model_data$YEAR.y)[m]
+        mod1 <- model_data[model_data$YEAR.y == year_mod,]
+        d <- list()
+        for(i in 1:nrow(mod1)) {
+                A <- matrix(c(mod1$PSS[i], mod1$PSD[i], mod1$PDS[i], mod1$PDD[i]), nrow = 2, ncol = 2, byrow = T)
+                year <- unique(mod1$YEAR.y)
+                list_A <- list()
+                for(j in seq(year,2020, by = 2)){
+                        if(year < 2022) {
+                                A <- A%*%A
+                        }
+                        
+                        list_A[[j]] <- c(A[1,1])
+                        year <- year +2
+                }
+                d[[i]] <- do.call(cbind, list_A)
+                
+        }
+        
+        f <- data.frame(do.call(rbind, d))
+        f$state <- mod1$LocationAbbr
+        colnames(f) <- c(seq(year_mod, 2020, by = 2), "state")
+        f$model <- paste("model", m )
+        f$year <- year_mod-2
+        f$Sample_Size.x <- mod1$Sample_Size.x
+        all_mod[[m]] <- f
+        
+}
+
+mod1 <- data.frame(all_mod[[1]])
+mod2 <- data.frame(all_mod[[2]])
+mod3 <- data.frame(all_mod[[3]])
+mod4 <- data.frame(all_mod[[4]])
+mod5 <- data.frame(all_mod[[5]])
+mod6 <- data.frame(all_mod[[6]])
+
+
+model1 <- mod1[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_1993 <- ext[ext$YEAR == 1993 & ext$Gender == "Female", ]
+data93 <- all_1993[, c("Data_Value", "LocationAbbr")]
+colnames(data93) <- c("yearprob", "state")
+model1 <- merge(model1, data93,by = "state")
+
+model2 <- mod2[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_1995 <- ext[ext$YEAR == 1995 & ext$Gender == "Female", ]
+data95 <- all_1995[, c("Data_Value", "LocationAbbr")]
+colnames(data95) <- c("yearprob", "state")
+model2 <- merge(model2, data95,by = "state")
+
+model3 <- mod3[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_1997 <- ext[ext$YEAR == 1997 & ext$Gender == "Female", ]
+data97 <- all_1997[, c("Data_Value", "LocationAbbr")]
+colnames(data97) <- c("yearprob", "state")
+model3 <- merge(model3, data97,by = "state")
+
+
+model4 <- mod4[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_1999 <- ext[ext$YEAR == 1999 & ext$Gender == "Female", ]
+data99 <- all_1999[, c("Data_Value", "LocationAbbr")]
+colnames(data99) <- c("yearprob", "state")
+model4 <- merge(model4, data99,by = "state")
+
+model5 <- mod5[, c("model", "year", "state", "Sample_Size.x", "X2007", 
+                   "X2009", "X2011", "X2013", "X2015", "X2017", "X2019")]
+all_2001 <- ext[ext$YEAR == 2001 & ext$Gender == "Female", ]
+data01 <- all_2001[, c("Data_Value", "LocationAbbr")]
+colnames(data01) <- c("yearprob", "state")
+model5 <- merge(model5, data01,by = "state")
+
+all_models <- rbind(model1, model2, model3, model4, model5)
+
+test_data_all <- ext[ext$YEAR>=2007 & ext$Gender == "Female", ]
+test_data <- test_data_all[, c("YEAR", "LocationAbbr", "Sample_Size", "Data_Value")]
+colnames(test_data) <- c("year", "state", "Sample_Size", "prob")
+
+
+year <- seq(2007, 2013, by = 2)
+num_mod <- length(unique(all_models$model))
+modl <- unique(all_models$model)
+list_ym <- list()
+errors <- list()
+for(j in 1:length(year)){
+        test_year <- test_data[test_data$year == year[j], ]
+        for(f in 1:num_mod){
+                m <- all_models[all_models$model == modl[f],]
+                merged_mod <- merge(m, test_year, by = "state")
+                merged_mod$prob <- merged_mod$prob/100
+                merged_mod$yearprob <- merged_mod$yearprob/100
+                if(year[j]== 2007){
+                        pre <- merged_mod$X2007
+                } 
+                else if(year[j]==2009) {
+                        pre <- merged_mod$X2009
+                }
+                else if(year[j]==2011) {
+                        pre <- merged_mod$X2011
+                }
+                else if(year[j]==2013) {
+                        pre <- merged_mod$X2013
+                }
+                merged_mod$true <- merged_mod$prob* merged_mod$Sample_Size/
+                        (merged_mod$prob*merged_mod$Sample_Size + merged_mod$yearprob*merged_mod$Sample_Size.x)
+                error <- sum((pre - merged_mod$true)^2)
+                errors[[f]] <- c(error, modl[f], year[j])
+        }
+        list_ym[[j]] <- do.call(rbind, errors)
+}
+
+output2 <- data.frame(do.call(rbind, list_ym))
+colnames(output2) <- c("errors", "model", "year")
+output2$errors <- as.numeric(paste(output2$errors))
+
+
+ggplot(output2, aes(x = year, y = errors, colour = model))+geom_point(size = 3)+
+        theme(text= element_text(size = 15))+xlab("Year")+ylab("Sum of Squared Errors of Female Smokers")
+dev.copy(png, "Figure 5. SSE for Females.png")
+dev.off()
+
+ggplot(output2, aes(x = model, y = errors, fill = model ))+geom_boxplot()+
+        theme(text = element_text(size = 15))+xlab("Model")+ylab("Sum of Squared Errors of Female Smokers")
+
+dev.copy(png, "Figure 6. Boxplot of SSE for Female.png")
+dev.off()
+visdat <- ext[ext$Gender == "Female", ]
+
+
+## Exploring Female Data
+ggplot(visdat, aes(x = YEAR, y = Data_Value/100))+geom_point(colour = "darkred")+stat_smooth(colour = "black")+
+        scale_x_continuous(breaks = seq(1993, 2013, by = 2))+theme(text = element_text(size = 15))+xlab("Year")+ylab("Proportion of Female Smokers")
+
+dev.copy(png, "Figure 7. Exploratory Data of Female.png")
+dev.off()
+
+Pred_Model <- (model4$X2019*(model4$yearprob/100)*model4$Sample_Size.x)/(model4$Sample_Size.x - (model4$X2019*model4$Sample_Size.x))
+pred_data <- data.frame(cbind(model4$state, Pred_Model))
+colnames(pred_data) <- c("state", "predictions")
+pred_data$predictions <- as.numeric(paste(pred_data$predictions))
+
+female_pred <- pred_data
+female_model4 <- model4
+
+ggplot(pred_data, aes(x = state, y = predictions))+geom_bar(stat = "identity", fill = "darkred")+scale_y_continuous(limits = c(0,0.5), breaks = seq(0, 0.5, by = 0.1))+
+        theme(text = element_text(size = 15))+xlab("State")+ylab("Predicted Proportion of Female Smokers in 2019")
+
+dev.copy(png, "Figure 8. Predicted Proportion of Female Smokers in 2019.png")
+dev.off()
+ggplot(model4, aes(x = state, y = yearprob/100))+geom_bar(stat = "identity", fill = "darkred")+scale_y_continuous(limits = c(0,0.5), breaks = seq(0, 0.5, by = 0.1))+
+        theme(text = element_text(size = 15))+xlab("State")+ylab("Proportion of Female Smokers in 1999")
+
+dev.copy(png, "Figure 8b. Proportion of Female Smokers in 1999.png")
+dev.off()
+
+male_model4$gender <- "Male"
+female_model4$gender <- "Female"
+c_mod4 <- rbind(male_model4, female_model4)
+
+male_pred$gender <- "Male"
+female_pred$gender <- "Female"
+c_pred <- rbind(male_pred, female_pred)
+
+ggplot(c_mod4, aes(x = state, y = yearprob/100, fill = gender))+geom_bar( stat = "identity", position = "dodge")+
+        scale_fill_manual(values = c(col2hex("darkred"), col2hex("darkblue")))+scale_y_continuous(limits = c(0, 0.5))+
+        xlab("State")+ylab("Proportion of Youth Smokers in 1999")+theme(text = element_text(size = 15))
+dev.copy(png, "Figure 9. Proportion of Youth Smokers in 1999.png")
+dev.off()
+
+ggplot(c_pred, aes(x = state, y = predictions, fill = gender))+geom_bar(stat = "identity", position = "dodge")+
+        scale_fill_manual(values = c(col2hex("darkred"), col2hex("darkblue")))+scale_y_continuous(limits = c(0,0.5))+
+        xlab("State")+ylab("Predicted Proportion of Youth Smokers in 2019")+theme(text = element_text(size = 15))
+dev.copy(png, "Figure 10. Predicted Proportion of Youth Smokers in 2019.png")
+
+dev.off()
+
+
